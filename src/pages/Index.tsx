@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClipboardList, Camera, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
+import { OMRProcessor } from "@/utils/imageProcessing";
 
 interface GradedSheet {
   id: string;
@@ -20,55 +21,67 @@ const Index = () => {
   const [answerKey, setAnswerKey] = useState<string[]>([]);
   const [gradedSheets, setGradedSheets] = useState<GradedSheet[]>([]);
   const [activeTab, setActiveTab] = useState("setup");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [omrProcessor] = useState(() => new OMRProcessor());
 
   const handleAnswerKeySet = (key: string[]) => {
     setAnswerKey(key);
     setActiveTab("scan");
   };
 
-  const simulateAnswerDetection = (imageData: string): string[] => {
-    // This is a simulation. In a real app, you would use image processing
-    // to detect marked answers from the captured image
-    return answerKey.map(() => 
-      ["A", "B", "C", "D"][Math.floor(Math.random() * 4)]
-    );
-  };
-
-  const handleImageCapture = (imageData: string) => {
+  const handleImageCapture = async (imageData: string) => {
     if (answerKey.length === 0) {
       toast.error("ابتدا کلید پاسخ را تنظیم کنید");
       return;
     }
 
-    // Simulate answer detection from image
-    const studentAnswers = simulateAnswerDetection(imageData);
+    setIsProcessing(true);
 
-    // Grade the answers
-    let correctCount = 0;
-    let incorrectCount = 0;
+    try {
+      // Process the image using OMR detection
+      const studentAnswers = await omrProcessor.processWithContours(
+        imageData,
+        answerKey.length
+      );
 
-    studentAnswers.forEach((answer, index) => {
-      if (answer === answerKey[index]) {
-        correctCount++;
-      } else {
-        incorrectCount++;
-      }
-    });
+      console.log("Detected answers:", studentAnswers);
 
-    const percentage = (correctCount / answerKey.length) * 100;
+      // Grade the answers
+      let correctCount = 0;
+      let incorrectCount = 0;
 
-    const newSheet: GradedSheet = {
-      id: `${gradedSheets.length + 1}`,
-      studentAnswers,
-      correctCount,
-      incorrectCount,
-      percentage,
-      timestamp: new Date(),
-    };
+      studentAnswers.forEach((answer, index) => {
+        if (answer === answerKey[index]) {
+          correctCount++;
+        } else {
+          incorrectCount++;
+        }
+      });
 
-    setGradedSheets([newSheet, ...gradedSheets]);
-    setActiveTab("results");
-    toast.success(`نمره: ${percentage.toFixed(0)}% - ${correctCount} از ${answerKey.length} صحیح`);
+      const percentage = (correctCount / answerKey.length) * 100;
+
+      const newSheet: GradedSheet = {
+        id: `${gradedSheets.length + 1}`,
+        studentAnswers,
+        correctCount,
+        incorrectCount,
+        percentage,
+        timestamp: new Date(),
+      };
+
+      setGradedSheets([newSheet, ...gradedSheets]);
+      setActiveTab("results");
+      
+      toast.success(
+        `✅ اصلاح انجام شد!\nنمره: ${percentage.toFixed(0)}% (${correctCount}/${answerKey.length})`,
+        { duration: 5000 }
+      );
+    } catch (error) {
+      console.error("Error processing image:", error);
+      toast.error("خطا در پردازش تصویر. لطفاً دوباره تلاش کنید.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -106,11 +119,17 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="scan" className="space-y-4">
-            <CameraCapture onCapture={handleImageCapture} />
-            {answerKey.length > 0 && (
-              <div className="text-center p-4 bg-primary/10 rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  کلید پاسخ برای {answerKey.length} سوال تنظیم شده است
+            <CameraCapture 
+              onCapture={handleImageCapture}
+              onProcessing={setIsProcessing}
+            />
+            {answerKey.length > 0 && !isProcessing && (
+              <div className="text-center p-4 bg-primary/10 rounded-lg border border-primary/20">
+                <p className="text-sm font-medium">
+                  آماده اصلاح: کلید پاسخ برای {answerKey.length} سوال تنظیم شده
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  تعداد پاسخنامه‌های اصلاح شده: {gradedSheets.length}
                 </p>
               </div>
             )}
