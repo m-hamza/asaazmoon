@@ -1,7 +1,9 @@
 /**
  * Image processing utilities for OMR (Optical Mark Recognition)
- * Detects filled bubbles on answer sheets
+ * Detects filled bubbles on answer sheets and QR codes for student identification
  */
+
+import jsQR from 'jsqr';
 
 interface Point {
   x: number;
@@ -14,6 +16,19 @@ interface DetectedAnswer {
   confidence: number;
 }
 
+export interface StudentInfo {
+  studentId: string;
+  studentName: string;
+  testId: string;
+  testDate?: string;
+  grade?: string;
+}
+
+export interface ProcessingResult {
+  studentInfo: StudentInfo | null;
+  answers: DetectedAnswer[];
+}
+
 export class OMRProcessor {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -24,12 +39,50 @@ export class OMRProcessor {
   }
 
   /**
-   * Main processing function to detect answers from image
+   * Detect QR code in image and extract student information
+   */
+  private detectQRCode(imageData: ImageData): StudentInfo | null {
+    try {
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+      
+      if (code) {
+        // Parse QR code data - expected format: JSON string
+        try {
+          const data = JSON.parse(code.data);
+          return {
+            studentId: data.studentId || data.id || 'Unknown',
+            studentName: data.studentName || data.name || 'Unknown',
+            testId: data.testId || data.test || 'Unknown',
+            testDate: data.testDate || data.date,
+            grade: data.grade || data.class,
+          };
+        } catch {
+          // If not JSON, try parsing as key-value pairs
+          const parts = code.data.split('|');
+          return {
+            studentId: parts[0] || 'Unknown',
+            studentName: parts[1] || 'Unknown',
+            testId: parts[2] || 'Unknown',
+            testDate: parts[3],
+            grade: parts[4],
+          };
+        }
+      }
+    } catch (error) {
+      console.error('QR detection error:', error);
+    }
+    return null;
+  }
+
+  /**
+   * Main processing function to detect QR code and answers from image
    */
   async processAnswerSheet(
     imageData: string,
     numQuestions: number
-  ): Promise<DetectedAnswer[]> {
+  ): Promise<ProcessingResult> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
@@ -42,11 +95,14 @@ export class OMRProcessor {
           // Get image data
           const imgData = this.ctx.getImageData(0, 0, img.width, img.height);
           
-          // Process image
+          // Detect QR code first
+          const studentInfo = this.detectQRCode(imgData);
+          
+          // Process image for answers
           const processed = this.preprocessImage(imgData);
           const answers = this.detectAnswers(processed, numQuestions);
           
-          resolve(answers);
+          resolve({ studentInfo, answers });
         } catch (error) {
           reject(error);
         }
@@ -240,12 +296,12 @@ export class OMRProcessor {
   }
 
   /**
-   * Enhanced processing with contour detection
+   * Enhanced processing with contour detection and QR code detection
    */
   async processWithContours(
     imageData: string,
     numQuestions: number
-  ): Promise<string[]> {
+  ): Promise<{ studentInfo: StudentInfo | null; answers: string[] }> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
@@ -256,7 +312,10 @@ export class OMRProcessor {
 
           const imgData = this.ctx.getImageData(0, 0, img.width, img.height);
           
-          // Apply image processing pipeline
+          // Detect QR code first (on original image)
+          const studentInfo = this.detectQRCode(imgData);
+          
+          // Apply image processing pipeline for bubble detection
           const grayscale = this.toGrayscale(imgData);
           const blurred = this.gaussianBlur(grayscale, 5);
           const binary = this.adaptiveThreshold(blurred);
@@ -268,7 +327,7 @@ export class OMRProcessor {
             4 // options per question
           );
           
-          resolve(detectedAnswers);
+          resolve({ studentInfo, answers: detectedAnswers });
         } catch (error) {
           reject(error);
         }

@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClipboardList, Camera, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
-import { OMRProcessor } from "@/utils/imageProcessing";
+import { OMRProcessor, StudentInfo } from "@/utils/imageProcessing";
 
 interface GradedSheet {
   id: string;
+  studentInfo: StudentInfo | null;
   studentAnswers: string[];
   correctCount: number;
   incorrectCount: number;
@@ -38,19 +39,20 @@ const Index = () => {
     setIsProcessing(true);
 
     try {
-      // Process the image using OMR detection
-      const studentAnswers = await omrProcessor.processWithContours(
+      // Process the image using OMR detection with QR code detection
+      const result = await omrProcessor.processWithContours(
         imageData,
         answerKey.length
       );
 
-      console.log("Detected answers:", studentAnswers);
+      console.log("Detected QR info:", result.studentInfo);
+      console.log("Detected answers:", result.answers);
 
       // Grade the answers
       let correctCount = 0;
       let incorrectCount = 0;
 
-      studentAnswers.forEach((answer, index) => {
+      result.answers.forEach((answer, index) => {
         if (answer === answerKey[index]) {
           correctCount++;
         } else {
@@ -62,7 +64,8 @@ const Index = () => {
 
       const newSheet: GradedSheet = {
         id: `${gradedSheets.length + 1}`,
-        studentAnswers,
+        studentInfo: result.studentInfo,
+        studentAnswers: result.answers,
         correctCount,
         incorrectCount,
         percentage,
@@ -72,10 +75,17 @@ const Index = () => {
       setGradedSheets([newSheet, ...gradedSheets]);
       setActiveTab("results");
       
-      toast.success(
-        `✅ اصلاح انجام شد!\nنمره: ${percentage.toFixed(0)}% (${correctCount}/${answerKey.length})`,
-        { duration: 5000 }
-      );
+      if (result.studentInfo) {
+        toast.success(
+          `✅ ${result.studentInfo.studentName}\nنمره: ${percentage.toFixed(0)}% (${correctCount}/${answerKey.length})`,
+          { duration: 5000 }
+        );
+      } else {
+        toast.success(
+          `✅ اصلاح انجام شد!\nنمره: ${percentage.toFixed(0)}% (${correctCount}/${answerKey.length})`,
+          { duration: 5000 }
+        );
+      }
     } catch (error) {
       console.error("Error processing image:", error);
       toast.error("خطا در پردازش تصویر. لطفاً دوباره تلاش کنید.");

@@ -184,6 +184,7 @@ export const CameraCapture = ({ onCapture, onProcessing }: CameraCaptureProps) =
           <div className="mt-4 p-4 rounded-lg bg-muted/50">
             <h4 className="text-sm font-medium mb-2">نکات مهم:</h4>
             <ul className="text-xs text-muted-foreground space-y-1">
+              <li>• QR کد در تصویر قابل مشاهده و خوانا باشد</li>
               <li>• پاسخنامه را به صورت صاف و بدون چین روی سطح مسطح قرار دهید</li>
               <li>• نور کافی داشته باشید و سایه روی پاسخنامه نیفتد</li>
               <li>• دوربین را موازی با پاسخنامه نگه دارید</li>
