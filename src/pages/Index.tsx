@@ -2,9 +2,10 @@ import { useState } from "react";
 import { AnswerKeySetup } from "@/components/AnswerKeySetup";
 import { CameraCapture } from "@/components/CameraCapture";
 import { ResultsDisplay } from "@/components/ResultsDisplay";
+import { StudentManagement } from "@/components/StudentManagement";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ClipboardList, Camera, BarChart3 } from "lucide-react";
+import { ClipboardList, Camera, BarChart3, Users } from "lucide-react";
 import { toast } from "sonner";
 import { OMRProcessor, StudentInfo } from "@/utils/imageProcessing";
 
@@ -21,7 +22,7 @@ interface GradedSheet {
 const Index = () => {
   const [answerKey, setAnswerKey] = useState<string[]>([]);
   const [gradedSheets, setGradedSheets] = useState<GradedSheet[]>([]);
-  const [activeTab, setActiveTab] = useState("setup");
+  const [activeTab, setActiveTab] = useState("students");
   const [isProcessing, setIsProcessing] = useState(false);
   const [omrProcessor] = useState(() => new OMRProcessor());
 
@@ -109,7 +110,11 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-8">
+          <TabsList className="grid w-full grid-cols-4 mb-8">
+            <TabsTrigger value="students" className="gap-2">
+              <Users className="h-4 w-4" />
+              اطلاعات داوطلبین
+            </TabsTrigger>
             <TabsTrigger value="setup" className="gap-2">
               <ClipboardList className="h-4 w-4" />
               کلید پاسخ
@@ -123,6 +128,10 @@ const Index = () => {
               نتایج
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="students" className="space-y-4">
+            <StudentManagement />
+          </TabsContent>
 
           <TabsContent value="setup" className="space-y-4">
             <AnswerKeySetup onAnswerKeySet={handleAnswerKeySet} />
