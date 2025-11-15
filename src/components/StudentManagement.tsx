@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,36 +27,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { School, Upload, UserPlus, Download, Plus, Trash2 } from "lucide-react";
+import { School, Upload, UserPlus, Download, Plus, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-
-interface Student {
-  id: string;
-  studentId: string;
-  firstName: string;
-  lastName: string;
-}
-
-interface ClassGrade {
-  id: string;
-  name: string;
-  students: Student[];
-}
-
-interface SchoolInfo {
-  name: string;
-  address: string;
-  principal: string;
-}
+import { 
+  saveSchoolData, 
+  loadSchoolData, 
+  StoredSchool, 
+  StoredClass, 
+  StoredStudent 
+} from "@/lib/storage";
+import { AnswerSheetGenerator, downloadPDF } from "@/lib/answerSheetGenerator";
 
 export const StudentManagement = () => {
-  const [schoolInfo, setSchoolInfo] = useState<SchoolInfo | null>(null);
-  const [classes, setClasses] = useState<ClassGrade[]>([]);
+  const [schoolInfo, setSchoolInfo] = useState<{ name: string; address: string; principal: string } | null>(null);
+  const [classes, setClasses] = useState<StoredClass[]>([]);
   const [isSchoolDialogOpen, setIsSchoolDialogOpen] = useState(false);
   const [isAddClassDialogOpen, setIsAddClassDialogOpen] = useState(false);
   const [isManualEntryDialogOpen, setIsManualEntryDialogOpen] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   
   // School info form
   const [schoolName, setSchoolName] = useState("");
@@ -70,6 +60,35 @@ export const StudentManagement = () => {
   const [manualStudentId, setManualStudentId] = useState("");
   const [manualFirstName, setManualFirstName] = useState("");
   const [manualLastName, setManualLastName] = useState("");
+
+  // Load data from localStorage on mount
+  useEffect(() => {
+    const savedData = loadSchoolData();
+    if (savedData) {
+      setSchoolInfo({
+        name: savedData.name,
+        address: savedData.address || "",
+        principal: savedData.principal || ""
+      });
+      setClasses(savedData.classes);
+      setSchoolName(savedData.name);
+      setSchoolAddress(savedData.address || "");
+      setSchoolPrincipal(savedData.principal || "");
+    }
+  }, []);
+
+  // Save to localStorage whenever data changes
+  useEffect(() => {
+    if (schoolInfo || classes.length > 0) {
+      const dataToSave: StoredSchool = {
+        name: schoolInfo?.name || "",
+        address: schoolInfo?.address,
+        principal: schoolInfo?.principal,
+        classes
+      };
+      saveSchoolData(dataToSave);
+    }
+  }, [schoolInfo, classes]);
 
   const handleSchoolInfoSubmit = () => {
     if (!schoolName.trim()) {
@@ -92,9 +111,10 @@ export const StudentManagement = () => {
       return;
     }
 
-    const newClass: ClassGrade = {
+    const newClass: StoredClass = {
       id: Date.now().toString(),
       name: className,
+      grade: className,
       students: [],
     };
 
@@ -122,11 +142,12 @@ export const StudentManagement = () => {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        const students: Student[] = jsonData.map((row: any, index: number) => ({
+        const students: StoredStudent[] = jsonData.map((row: any, index: number) => ({
           id: `${classId}-${Date.now()}-${index}`,
           studentId: row["کد داوطلبی"] || row["studentId"] || "",
           firstName: row["نام"] || row["firstName"] || "",
           lastName: row["نام خانوادگی"] || row["lastName"] || "",
+          className: classes.find(c => c.id === classId)?.name || ""
         }));
 
         setClasses(
@@ -156,11 +177,13 @@ export const StudentManagement = () => {
       return;
     }
 
-    const newStudent: Student = {
+    const classData = classes.find(c => c.id === selectedClassId);
+    const newStudent: StoredStudent = {
       id: `${selectedClassId}-${Date.now()}`,
       studentId: manualStudentId,
       firstName: manualFirstName,
       lastName: manualLastName,
+      className: classData?.name || ""
     };
 
     setClasses(
@@ -173,7 +196,7 @@ export const StudentManagement = () => {
     setManualFirstName("");
     setManualLastName("");
     setIsManualEntryDialogOpen(false);
-    toast.success("دانش‌آموز اضافه شد");
+    toast.success("دانش‌آموز با موفقیت اضافه شد");
   };
 
   const handleDeleteStudent = (classId: string, studentId: string) => {
@@ -231,6 +254,64 @@ export const StudentManagement = () => {
     XLSX.writeFile(workbook, fileName);
     toast.success("فایل اکسل ذخیره شد");
   };
+
+  const handleGenerateAnswerSheets = async (classId: string) => {
+    const classData = classes.find((c) => c.id === classId);
+    if (!classData || classData.students.length === 0) {
+      toast.error("این پایه هیچ دانش‌آموزی ندارد");
+      return;
+    }
+
+    setIsGeneratingPDF(true);
+    try {
+      const generator = new AnswerSheetGenerator({
+        numQuestions: 50,
+        questionsPerColumn: 25,
+        optionsPerQuestion: 4,
+        schoolName: schoolInfo?.name,
+        examTitle: "آزمون"
+      });
+
+      const pdfBlob = await generator.generateForMultipleStudents(classData.students);
+      downloadPDF(pdfBlob, `پاسخبرگ_${classData.name}.pdf`);
+      toast.success(`${classData.students.length} پاسخبرگ تولید شد`);
+    } catch (error) {
+      console.error("Error generating answer sheets:", error);
+      toast.error("خطا در تولید پاسخبرگ‌ها");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
+  const handleGenerateAllAnswerSheets = async () => {
+    const allStudents = classes.flatMap(c => c.students);
+    if (allStudents.length === 0) {
+      toast.error("هیچ دانش‌آموزی ثبت نشده است");
+      return;
+    }
+
+    setIsGeneratingPDF(true);
+    try {
+      const generator = new AnswerSheetGenerator({
+        numQuestions: 50,
+        questionsPerColumn: 25,
+        optionsPerQuestion: 4,
+        schoolName: schoolInfo?.name,
+        examTitle: "آزمون"
+      });
+
+      const pdfBlob = await generator.generateForMultipleStudents(allStudents);
+      downloadPDF(pdfBlob, `پاسخبرگ_همه_دانش‌آموزان.pdf`);
+      toast.success(`${allStudents.length} پاسخبرگ تولید شد`);
+    } catch (error) {
+      console.error("Error generating answer sheets:", error);
+      toast.error("خطا در تولید پاسخبرگ‌ها");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
+  const totalStudents = classes.reduce((sum, c) => sum + c.students.length, 0);
 
   return (
     <div className="space-y-6">
@@ -350,14 +431,25 @@ export const StudentManagement = () => {
               </Dialog>
 
               {classes.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => exportToExcel()}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  خروجی کلی
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportToExcel()}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    خروجی کلی
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateAllAnswerSheets}
+                    disabled={isGeneratingPDF}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    {isGeneratingPDF ? "در حال تولید..." : "پاسخبرگ کلی"}
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -383,6 +475,15 @@ export const StudentManagement = () => {
                         >
                           <Download className="h-4 w-4 mr-2" />
                           خروجی
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateAnswerSheets(cls.id)}
+                          disabled={cls.students.length === 0 || isGeneratingPDF}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          پاسخبرگ
                         </Button>
                         <Button
                           variant="outline"
