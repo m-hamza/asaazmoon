@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AnswerKeySetup } from "@/components/AnswerKeySetup";
 import { CameraCapture } from "@/components/CameraCapture";
 import { ResultsDisplay } from "@/components/ResultsDisplay";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClipboardList, Camera, BarChart3, Users } from "lucide-react";
 import { toast } from "sonner";
 import { OMRProcessor, StudentInfo } from "@/utils/imageProcessing";
+import { saveAnswerKey, loadAnswerKeys, saveResult, loadResults, StoredAnswerKey, StoredResult } from "@/lib/storage";
 
 interface GradedSheet {
   id: string;
@@ -21,13 +22,43 @@ interface GradedSheet {
 
 const Index = () => {
   const [answerKey, setAnswerKey] = useState<string[]>([]);
+  const [currentAnswerKeyId, setCurrentAnswerKeyId] = useState<string>("");
   const [gradedSheets, setGradedSheets] = useState<GradedSheet[]>([]);
   const [activeTab, setActiveTab] = useState("students");
   const [isProcessing, setIsProcessing] = useState(false);
   const [omrProcessor] = useState(() => new OMRProcessor());
 
+  // Load saved data on mount
+  useEffect(() => {
+    const savedResults = loadResults();
+    const mappedResults = savedResults.map(r => ({
+      id: r.id,
+      studentInfo: {
+        studentId: r.studentId,
+        studentName: r.studentName,
+        testId: r.answerKeyId,
+        testDate: r.timestamp
+      },
+      studentAnswers: r.answers,
+      correctCount: r.correctCount,
+      incorrectCount: r.incorrectCount,
+      percentage: r.percentage,
+      timestamp: new Date(r.timestamp)
+    }));
+    setGradedSheets(mappedResults);
+  }, []);
+
   const handleAnswerKeySet = (key: string[]) => {
+    const keyId = Date.now().toString();
+    const newKey: StoredAnswerKey = {
+      id: keyId,
+      name: `کلید پاسخ ${new Date().toLocaleDateString('fa-IR')}`,
+      answers: key,
+      createdAt: new Date().toISOString()
+    };
+    saveAnswerKey(newKey);
     setAnswerKey(key);
+    setCurrentAnswerKeyId(keyId);
     setActiveTab("scan");
   };
 
@@ -64,7 +95,7 @@ const Index = () => {
       const percentage = (correctCount / answerKey.length) * 100;
 
       const newSheet: GradedSheet = {
-        id: `${gradedSheets.length + 1}`,
+        id: Date.now().toString(),
         studentInfo: result.studentInfo,
         studentAnswers: result.answers,
         correctCount,
@@ -72,6 +103,21 @@ const Index = () => {
         percentage,
         timestamp: new Date(),
       };
+
+      // Save to localStorage
+      const storedResult: StoredResult = {
+        id: newSheet.id,
+        studentId: result.studentInfo?.studentId || 'unknown',
+        studentName: result.studentInfo?.studentName || 'نامشخص',
+        answerKeyId: currentAnswerKeyId,
+        answers: result.answers,
+        correctCount,
+        incorrectCount,
+        percentage,
+        timestamp: new Date().toISOString(),
+        className: result.studentInfo?.grade
+      };
+      saveResult(storedResult);
 
       setGradedSheets([newSheet, ...gradedSheets]);
       setActiveTab("results");
