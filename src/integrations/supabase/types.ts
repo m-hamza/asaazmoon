@@ -14,7 +14,190 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      answer_keys: {
+        Row: {
+          answers: Json
+          created_at: string | null
+          grade: string | null
+          id: string
+          name: string
+          num_questions: number
+          subject: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          answers: Json
+          created_at?: string | null
+          grade?: string | null
+          id?: string
+          name: string
+          num_questions: number
+          subject?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          answers?: Json
+          created_at?: string | null
+          grade?: string | null
+          id?: string
+          name?: string
+          num_questions?: number
+          subject?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      classes: {
+        Row: {
+          created_at: string | null
+          grade: string
+          id: string
+          name: string
+          school_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          grade: string
+          id?: string
+          name: string
+          school_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          grade?: string
+          id?: string
+          name?: string
+          school_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "classes_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_results: {
+        Row: {
+          answer_key_id: string | null
+          answers: Json
+          correct_count: number
+          created_at: string | null
+          exam_date: string | null
+          id: string
+          incorrect_count: number
+          percentage: number
+          student_id: string | null
+        }
+        Insert: {
+          answer_key_id?: string | null
+          answers: Json
+          correct_count: number
+          created_at?: string | null
+          exam_date?: string | null
+          id?: string
+          incorrect_count: number
+          percentage: number
+          student_id?: string | null
+        }
+        Update: {
+          answer_key_id?: string | null
+          answers?: Json
+          correct_count?: number
+          created_at?: string | null
+          exam_date?: string | null
+          id?: string
+          incorrect_count?: number
+          percentage?: number
+          student_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_results_answer_key_id_fkey"
+            columns: ["answer_key_id"]
+            isOneToOne: false
+            referencedRelation: "answer_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_results_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schools: {
+        Row: {
+          address: string | null
+          created_at: string | null
+          id: string
+          name: string
+          principal: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          principal?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          principal?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      students: {
+        Row: {
+          class_id: string | null
+          created_at: string | null
+          first_name: string
+          id: string
+          last_name: string
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          class_id?: string | null
+          created_at?: string | null
+          first_name: string
+          id?: string
+          last_name: string
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          class_id?: string | null
+          created_at?: string | null
+          first_name?: string
+          id?: string
+          last_name?: string
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "students_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
