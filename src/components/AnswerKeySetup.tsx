@@ -12,12 +12,12 @@ interface AnswerKeySetupProps {
 }
 
 export const AnswerKeySetup = ({ onAnswerKeySet }: AnswerKeySetupProps) => {
-  const [numQuestions, setNumQuestions] = useState<number>(20);
-  const [answers, setAnswers] = useState<string[]>(Array(20).fill("A"));
+  const [numQuestions, setNumQuestions] = useState<number>(120);
+  const [answers, setAnswers] = useState<string[]>(Array(120).fill("A"));
 
   const handleNumQuestionsChange = (value: string) => {
     const num = parseInt(value) || 0;
-    if (num > 0 && num <= 100) {
+    if (num > 0 && num <= 150) {
       setNumQuestions(num);
       setAnswers(Array(num).fill("A"));
     }
@@ -52,7 +52,7 @@ export const AnswerKeySetup = ({ onAnswerKeySet }: AnswerKeySetupProps) => {
             id="numQuestions"
             type="number"
             min="1"
-            max="100"
+            max="150"
             value={numQuestions}
             onChange={(e) => handleNumQuestionsChange(e.target.value)}
             className="max-w-xs"

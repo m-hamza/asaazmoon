@@ -18,8 +18,8 @@ export interface AnswerSheetConfig {
 }
 
 const DEFAULT_CONFIG: AnswerSheetConfig = {
-  numQuestions: 50,
-  questionsPerColumn: 25,
+  numQuestions: 120,
+  questionsPerColumn: 40,
   optionsPerQuestion: 4,
 };
 
@@ -78,21 +78,21 @@ export class AnswerSheetGenerator {
   private drawHeader(pdf: jsPDF, pageWidth: number): void {
     // School Name
     if (this.config.schoolName) {
-      pdf.setFontSize(14);
+      pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(this.config.schoolName, pageWidth / 2, 15, { align: 'center' });
+      pdf.text(this.config.schoolName, pageWidth / 2, 12, { align: 'center' });
     }
 
     // Exam Title
     if (this.config.examTitle) {
-      pdf.setFontSize(12);
+      pdf.setFontSize(13);
       pdf.setFont('helvetica', 'normal');
-      pdf.text(this.config.examTitle, pageWidth / 2, 22, { align: 'center' });
+      pdf.text(this.config.examTitle, pageWidth / 2, 19, { align: 'center' });
     }
 
     // Subject and Date
     pdf.setFontSize(10);
-    const y = 28;
+    const y = 25;
     if (this.config.subject) {
       pdf.text(`درس: ${this.config.subject}`, 15, y);
     }
@@ -102,11 +102,11 @@ export class AnswerSheetGenerator {
 
     // Border line
     pdf.setLineWidth(0.5);
-    pdf.line(10, 32, pageWidth - 10, 32);
+    pdf.line(10, 28, pageWidth - 10, 28);
   }
 
   private async drawStudentInfo(pdf: jsPDF, student: StoredStudent, pageWidth: number): Promise<void> {
-    const startY = 38;
+    const startY = 32;
     
     // Generate QR Code with student data
     const qrData = JSON.stringify({
@@ -141,11 +141,11 @@ export class AnswerSheetGenerator {
   }
 
   private drawAnswerGrid(pdf: jsPDF, pageWidth: number, pageHeight: number): void {
-    const startY = 75;
-    const bubbleRadius = 2.5;
-    const questionSpacing = 8;
-    const optionSpacing = 7;
-    const columnWidth = 45;
+    const startY = 68;
+    const bubbleRadius = 2;
+    const questionSpacing = 5.5;
+    const optionSpacing = 6;
+    const columnWidth = (pageWidth - 30) / 3; // 3 columns for 120 questions
     const numColumns = Math.ceil(this.config.numQuestions / this.config.questionsPerColumn);
     
     const options = ['الف', 'ب', 'ج', 'د'];
@@ -154,7 +154,7 @@ export class AnswerSheetGenerator {
     const totalWidth = numColumns * columnWidth;
     let startX = (pageWidth - totalWidth) / 2;
 
-    pdf.setFontSize(9);
+    pdf.setFontSize(8);
     pdf.setFont('helvetica', 'normal');
 
     for (let col = 0; col < numColumns; col++) {
@@ -168,18 +168,19 @@ export class AnswerSheetGenerator {
         const y = startY + (q * questionSpacing);
         
         // Question number
-        pdf.text(`${questionNum}`, colStartX, y + 1.5);
+        pdf.setFontSize(7);
+        pdf.text(`${questionNum}`, colStartX + 1, y + 1);
         
         // Draw bubbles for options
         for (let opt = 0; opt < this.config.optionsPerQuestion; opt++) {
-          const bubbleX = colStartX + 8 + (opt * optionSpacing);
+          const bubbleX = colStartX + 9 + (opt * optionSpacing);
           
           // Option label
-          pdf.setFontSize(7);
-          pdf.text(options[opt], bubbleX - 1, y - 2);
+          pdf.setFontSize(6);
+          pdf.text(options[opt], bubbleX - 0.8, y - 1.5);
           
           // Bubble circle
-          pdf.setLineWidth(0.3);
+          pdf.setLineWidth(0.25);
           pdf.circle(bubbleX, y, bubbleRadius);
         }
       }
