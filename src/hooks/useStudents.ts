@@ -44,6 +44,12 @@ export const useStudents = (classId?: string) => {
   }, [classId]);
 
   const addStudent = async (studentData: Omit<Student, 'id' | 'created_at' | 'updated_at'>) => {
+    const { studentSchema } = await import('@/lib/validation');
+    const validation = studentSchema.safeParse(studentData);
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('students')
@@ -67,6 +73,15 @@ export const useStudents = (classId?: string) => {
   };
 
   const addMultipleStudents = async (studentsData: Omit<Student, 'id' | 'created_at' | 'updated_at'>[]) => {
+    const { studentSchema } = await import('@/lib/validation');
+    
+    for (const student of studentsData) {
+      const validation = studentSchema.safeParse(student);
+      if (!validation.success) {
+        toast.error(`خطا در اعتبارسنجی: ${validation.error.errors[0].message}`);
+        return;
+      }
+    }
     try {
       const { data, error } = await supabase
         .from('students')

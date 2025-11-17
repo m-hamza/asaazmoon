@@ -46,6 +46,12 @@ export const useAnswerKeys = () => {
   }, []);
 
   const addAnswerKey = async (answerKeyData: Omit<AnswerKey, 'id' | 'created_at' | 'updated_at'>) => {
+    const { answerKeySchema } = await import('@/lib/validation');
+    const validation = answerKeySchema.safeParse(answerKeyData);
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('answer_keys')
