@@ -4,6 +4,7 @@
  */
 
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import QRCode from 'qrcode';
 import { StoredStudent } from './storage';
 
@@ -31,180 +32,142 @@ export class AnswerSheetGenerator {
   }
 
   async generateForStudent(student: StoredStudent): Promise<Blob> {
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
-
-    await this.drawAnswerSheet(pdf, student);
-    return pdf.output('blob');
+    return await this.generateHTMLToPDF([student]);
   }
 
   async generateForMultipleStudents(students: StoredStudent[]): Promise<Blob> {
+    return await this.generateHTMLToPDF(students);
+  }
+
+  private async generateHTMLToPDF(students: StoredStudent[]): Promise<Blob> {
+    // Create a temporary container
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.fontFamily = 'Vazirmatn, sans-serif';
+    document.body.appendChild(container);
+
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
     });
 
-    for (let i = 0; i < students.length; i++) {
-      if (i > 0) {
-        pdf.addPage();
-      }
-      await this.drawAnswerSheet(pdf, students[i]);
-    }
-
-    return pdf.output('blob');
-  }
-
-  private async drawAnswerSheet(pdf: jsPDF, student: StoredStudent): Promise<void> {
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    
-    // Header Section
-    this.drawHeader(pdf, pageWidth);
-    
-    // Student Info with QR Code
-    await this.drawStudentInfo(pdf, student, pageWidth);
-    
-    // Answer Bubbles Grid
-    this.drawAnswerGrid(pdf, pageWidth, pageHeight);
-    
-    // Footer
-    this.drawFooter(pdf, pageWidth, pageHeight);
-  }
-
-  private drawHeader(pdf: jsPDF, pageWidth: number): void {
-    // School Name
-    if (this.config.schoolName) {
-      pdf.setFontSize(16);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(this.config.schoolName, pageWidth / 2, 12, { align: 'center' });
-    }
-
-    // Exam Title
-    if (this.config.examTitle) {
-      pdf.setFontSize(13);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(this.config.examTitle, pageWidth / 2, 19, { align: 'center' });
-    }
-
-    // Subject and Date
-    pdf.setFontSize(10);
-    const y = 25;
-    if (this.config.subject) {
-      pdf.text(`درس: ${this.config.subject}`, 15, y);
-    }
-    if (this.config.date) {
-      pdf.text(`تاریخ: ${this.config.date}`, pageWidth - 15, y, { align: 'right' });
-    }
-
-    // Border line
-    pdf.setLineWidth(0.5);
-    pdf.line(10, 28, pageWidth - 10, 28);
-  }
-
-  private async drawStudentInfo(pdf: jsPDF, student: StoredStudent, pageWidth: number): Promise<void> {
-    const startY = 32;
-    
-    // Generate QR Code with student data
-    const qrData = JSON.stringify({
-      id: student.studentId,
-      name: `${student.firstName} ${student.lastName}`,
-      class: student.className
-    });
-    
     try {
-      const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
-        width: 200,
-        margin: 1
-      });
-      
-      // Draw QR Code on the right
-      pdf.addImage(qrCodeDataUrl, 'PNG', pageWidth - 35, startY, 25, 25);
-    } catch (error) {
-      console.error('Error generating QR code:', error);
+      for (let i = 0; i < students.length; i++) {
+        const student = students[i];
+        
+        // Generate QR code
+        const qrCodeDataUrl = await QRCode.toDataURL(JSON.stringify({
+          id: student.studentId,
+          name: `${student.firstName} ${student.lastName}`,
+          class: student.className
+        }), {
+          width: 200,
+          margin: 1
+        });
+
+        // Create HTML for answer sheet
+        const html = this.createAnswerSheetHTML(student, qrCodeDataUrl);
+        container.innerHTML = html;
+
+        // Convert to canvas
+        const canvas = await html2canvas(container.firstChild as HTMLElement, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          width: 794, // A4 width in pixels at 96 DPI
+          height: 1123 // A4 height in pixels at 96 DPI
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        
+        if (i > 0) {
+          pdf.addPage();
+        }
+        
+        // Add image to PDF (A4 size: 210x297mm)
+        pdf.addImage(imgData, 'PNG', 0, 0, 210, 297);
+      }
+
+      return pdf.output('blob');
+    } finally {
+      document.body.removeChild(container);
     }
-
-    // Student Info on the left
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'normal');
-    
-    pdf.text(`کد داوطلب: ${student.studentId}`, 15, startY + 5);
-    pdf.text(`نام و نام خانوادگی: ${student.firstName} ${student.lastName}`, 15, startY + 12);
-    pdf.text(`کلاس: ${student.className}`, 15, startY + 19);
-
-    // Border around student info
-    pdf.setLineWidth(0.3);
-    pdf.rect(10, startY - 2, pageWidth - 20, 30);
   }
 
-  private drawAnswerGrid(pdf: jsPDF, pageWidth: number, pageHeight: number): void {
-    const startY = 68;
-    const bubbleRadius = 2;
-    const questionSpacing = 5.5;
-    const optionSpacing = 6;
-    const columnWidth = (pageWidth - 30) / 3; // 3 columns for 120 questions
+  private createAnswerSheetHTML(student: StoredStudent, qrCodeUrl: string): string {
+    const options = ['الف', 'ب', 'ج', 'د'];
     const numColumns = Math.ceil(this.config.numQuestions / this.config.questionsPerColumn);
     
-    const options = ['الف', 'ب', 'ج', 'د'];
-    
-    // Calculate starting X to center the grid
-    const totalWidth = numColumns * columnWidth;
-    let startX = (pageWidth - totalWidth) / 2;
-
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'normal');
-
+    // Create columns HTML
+    let columnsHTML = '';
     for (let col = 0; col < numColumns; col++) {
-      const colStartX = startX + (col * columnWidth);
-      
+      let questionsHTML = '';
       for (let q = 0; q < this.config.questionsPerColumn; q++) {
         const questionNum = (col * this.config.questionsPerColumn) + q + 1;
-        
         if (questionNum > this.config.numQuestions) break;
         
-        const y = startY + (q * questionSpacing);
+        const optionsHTML = options.map(opt => 
+          `<div style="display: flex; flex-direction: column; align-items: center; margin: 0 4px;">
+            <span style="font-size: 9px; margin-bottom: 2px;">${opt}</span>
+            <div style="width: 16px; height: 16px; border: 1.5px solid #000; border-radius: 50%;"></div>
+          </div>`
+        ).join('');
         
-        // Question number
-        pdf.setFontSize(7);
-        pdf.text(`${questionNum}`, colStartX + 1, y + 1);
-        
-        // Draw bubbles for options
-        for (let opt = 0; opt < this.config.optionsPerQuestion; opt++) {
-          const bubbleX = colStartX + 9 + (opt * optionSpacing);
-          
-          // Option label
-          pdf.setFontSize(6);
-          pdf.text(options[opt], bubbleX - 0.8, y - 1.5);
-          
-          // Bubble circle
-          pdf.setLineWidth(0.25);
-          pdf.circle(bubbleX, y, bubbleRadius);
-        }
+        questionsHTML += `
+          <div style="display: flex; align-items: center; margin-bottom: 8px; direction: rtl;">
+            <span style="font-size: 11px; font-weight: 600; margin-left: 8px; min-width: 25px;">${questionNum}</span>
+            <div style="display: flex; gap: 2px;">
+              ${optionsHTML}
+            </div>
+          </div>
+        `;
       }
       
-      // Column separator
-      if (col < numColumns - 1) {
-        pdf.setLineWidth(0.1);
-        pdf.setDrawColor(200);
-        pdf.line(colStartX + columnWidth - 2, startY - 5, colStartX + columnWidth - 2, startY + (this.config.questionsPerColumn * questionSpacing));
-        pdf.setDrawColor(0);
-      }
+      columnsHTML += `
+        <div style="flex: 1; padding: 0 15px; ${col < numColumns - 1 ? 'border-left: 1px solid #ddd;' : ''}">
+          ${questionsHTML}
+        </div>
+      `;
     }
 
-    // Grid border
-    pdf.setLineWidth(0.5);
-    pdf.rect(startX - 5, startY - 8, totalWidth + 10, (this.config.questionsPerColumn * questionSpacing) + 5);
-  }
+    return `
+      <div style="width: 794px; height: 1123px; padding: 40px; background: white; font-family: 'Vazirmatn', sans-serif; direction: rtl;">
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 15px;">
+          ${this.config.schoolName ? `<h1 style="font-size: 24px; font-weight: bold; margin: 0 0 10px 0;">${this.config.schoolName}</h1>` : ''}
+          ${this.config.examTitle ? `<h2 style="font-size: 18px; font-weight: normal; margin: 0 0 10px 0;">${this.config.examTitle}</h2>` : ''}
+          <div style="display: flex; justify-content: space-between; font-size: 14px; margin-top: 10px;">
+            ${this.config.subject ? `<span>درس: ${this.config.subject}</span>` : '<span></span>'}
+            ${this.config.date ? `<span>تاریخ: ${this.config.date}</span>` : '<span></span>'}
+          </div>
+        </div>
 
-  private drawFooter(pdf: jsPDF, pageWidth: number, pageHeight: number): void {
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'italic');
-    pdf.setTextColor(100);
-    pdf.text('لطفاً حباب‌ها را کاملاً پر کنید', pageWidth / 2, pageHeight - 10, { align: 'center' });
-    pdf.setTextColor(0);
+        <!-- Student Info -->
+        <div style="border: 2px solid #000; padding: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="flex: 1;">
+            <div style="font-size: 15px; margin-bottom: 8px;">کد داوطلب: <strong>${student.studentId}</strong></div>
+            <div style="font-size: 15px; margin-bottom: 8px;">نام و نام خانوادگی: <strong>${student.firstName} ${student.lastName}</strong></div>
+            <div style="font-size: 15px;">کلاس: <strong>${student.className}</strong></div>
+          </div>
+          <img src="${qrCodeUrl}" style="width: 100px; height: 100px;" alt="QR Code" />
+        </div>
+
+        <!-- Answer Grid -->
+        <div style="border: 2px solid #000; padding: 20px; margin-bottom: 20px;">
+          <div style="display: flex; direction: rtl;">
+            ${columnsHTML}
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; font-size: 12px; color: #666; font-style: italic;">
+          لطفاً حباب‌ها را کاملاً پر کنید
+        </div>
+      </div>
+    `;
   }
 }
 
