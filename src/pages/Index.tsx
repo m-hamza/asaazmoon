@@ -5,12 +5,13 @@ import { ResultsDisplay } from "@/components/ResultsDisplay";
 import { StudentManagement } from "@/components/StudentManagement";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ClipboardList, Camera, BarChart3, Users } from "lucide-react";
+import { ClipboardList, Camera, BarChart3, Users, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { OMRProcessor, StudentInfo } from "@/utils/imageProcessing";
 import { useAnswerKeys } from "@/hooks/useAnswerKeys";
 import { useExamResults } from "@/hooks/useExamResults";
 import { useStudents } from "@/hooks/useStudents";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface GradedSheet {
   id: string;
@@ -33,6 +34,7 @@ const Index = () => {
   const { addAnswerKey } = useAnswerKeys();
   const { examResults, addExamResult, refreshExamResults } = useExamResults();
   const { getAllStudents } = useStudents();
+  const { signOut, user } = useAuth();
 
   // Load exam results on mount
   useEffect(() => {
@@ -169,13 +171,24 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card shadow-sm">
-        <div className="container mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-primary">
+        <div className="container mx-auto px-4 py-6 relative">
+          <div className="absolute left-4 top-6">
+            <Button onClick={signOut} variant="outline" size="sm">
+              <LogOut className="h-4 w-4 ml-2" />
+              خروج
+            </Button>
+          </div>
+          <h1 className="text-3xl font-bold text-primary text-center">
             سیستم اصلاح پاسخنامه تستی
           </h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-muted-foreground mt-2 text-center">
             اصلاح خودکار پاسخنامه‌های چهارگزینه‌ای با دوربین
           </p>
+          {user && (
+            <p className="text-sm text-muted-foreground text-center mt-1">
+              کاربر: {user.email}
+            </p>
+          )}
         </div>
       </header>
 

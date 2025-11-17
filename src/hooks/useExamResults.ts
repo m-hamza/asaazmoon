@@ -51,6 +51,17 @@ export const useExamResults = () => {
   }, []);
 
   const addExamResult = async (resultData: Omit<ExamResult, 'id' | 'created_at'>) => {
+    const { examResultSchema } = await import('@/lib/validation');
+    const validationData = {
+      ...resultData,
+      student_id: resultData.student_id || '',
+      answer_key_id: resultData.answer_key_id || ''
+    };
+    const validation = examResultSchema.safeParse(validationData);
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('exam_results')

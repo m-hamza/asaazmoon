@@ -77,6 +77,12 @@ export const useSchool = () => {
   }, []);
 
   const saveSchool = async (schoolData: Omit<School, 'id' | 'created_at' | 'updated_at'>) => {
+    const { schoolSchema } = await import('@/lib/validation');
+    const validation = schoolSchema.safeParse(schoolData);
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
     try {
       if (school?.id) {
         const { data, error } = await supabase
@@ -110,6 +116,12 @@ export const useSchool = () => {
   };
 
   const addClass = async (classData: Omit<Class, 'id' | 'created_at' | 'updated_at'>) => {
+    const { classSchema } = await import('@/lib/validation');
+    const validation = classSchema.safeParse(classData);
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('classes')
