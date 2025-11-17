@@ -8,7 +8,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClipboardList, Camera, BarChart3, Users } from "lucide-react";
 import { toast } from "sonner";
 import { OMRProcessor, StudentInfo } from "@/utils/imageProcessing";
-import { saveAnswerKey, loadAnswerKeys, saveResult, loadResults, StoredAnswerKey, StoredResult } from "@/lib/storage";
+import { useAnswerKeys } from "@/hooks/useAnswerKeys";
+import { useExamResults } from "@/hooks/useExamResults";
+import { useStudents } from "@/hooks/useStudents";
 
 interface GradedSheet {
   id: string;
@@ -27,39 +29,50 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState("students");
   const [isProcessing, setIsProcessing] = useState(false);
   const [omrProcessor] = useState(() => new OMRProcessor());
+  
+  const { addAnswerKey } = useAnswerKeys();
+  const { examResults, addExamResult, refreshExamResults } = useExamResults();
+  const { getAllStudents } = useStudents();
 
-  // Load saved data on mount
+  // Load exam results on mount
   useEffect(() => {
-    const savedResults = loadResults();
-    const mappedResults = savedResults.map(r => ({
-      id: r.id,
-      studentInfo: {
-        studentId: r.studentId,
-        studentName: r.studentName,
-        testId: r.answerKeyId,
-        testDate: r.timestamp
-      },
-      studentAnswers: r.answers,
-      correctCount: r.correctCount,
-      incorrectCount: r.incorrectCount,
-      percentage: r.percentage,
-      timestamp: new Date(r.timestamp)
-    }));
-    setGradedSheets(mappedResults);
+    const loadResults = async () => {
+      const results = await refreshExamResults();
+      // Map to GradedSheet format if needed
+      const mapped = results.map((r: any) => ({
+        id: r.id,
+        studentInfo: {
+          studentId: r.students?.student_id || 'unknown',
+          studentName: `${r.students?.first_name || ''} ${r.students?.last_name || ''}`.trim() || 'نامشخص',
+          testId: r.answer_key_id,
+          testDate: r.exam_date,
+          grade: r.students?.class_id
+        },
+        studentAnswers: r.answers,
+        correctCount: r.correct_count,
+        incorrectCount: r.incorrect_count,
+        percentage: r.percentage,
+        timestamp: new Date(r.exam_date || r.created_at)
+      }));
+      setGradedSheets(mapped);
+    };
+    loadResults();
   }, []);
 
-  const handleAnswerKeySet = (key: string[]) => {
-    const keyId = Date.now().toString();
-    const newKey: StoredAnswerKey = {
-      id: keyId,
-      name: `کلید پاسخ ${new Date().toLocaleDateString('fa-IR')}`,
-      answers: key,
-      createdAt: new Date().toISOString()
-    };
-    saveAnswerKey(newKey);
-    setAnswerKey(key);
-    setCurrentAnswerKeyId(keyId);
-    setActiveTab("scan");
+  const handleAnswerKeySet = async (key: string[]) => {
+    try {
+      const answerKeyData = await addAnswerKey({
+        name: `کلید پاسخ ${new Date().toLocaleDateString('fa-IR')}`,
+        answers: key,
+        num_questions: key.length
+      });
+      
+      setAnswerKey(key);
+      setCurrentAnswerKeyId(answerKeyData.id);
+      setActiveTab("scan");
+    } catch (error) {
+      console.error("Error saving answer key:", error);
+    }
   };
 
   const handleImageCapture = async (imageData: string) => {
@@ -104,20 +117,32 @@ const Index = () => {
         timestamp: new Date(),
       };
 
-      // Save to localStorage
-      const storedResult: StoredResult = {
-        id: newSheet.id,
-        studentId: result.studentInfo?.studentId || 'unknown',
-        studentName: result.studentInfo?.studentName || 'نامشخص',
-        answerKeyId: currentAnswerKeyId,
-        answers: result.answers,
-        correctCount,
-        incorrectCount,
-        percentage,
-        timestamp: new Date().toISOString(),
-        className: result.studentInfo?.grade
-      };
-      saveResult(storedResult);
+      // Find student in database by student_id from QR
+      let studentDbId = '';
+      if (result.studentInfo?.studentId) {
+        const allStudents = await getAllStudents();
+        const foundStudent = allStudents.find(s => s.student_id === result.studentInfo.studentId);
+        if (foundStudent) {
+          studentDbId = foundStudent.id;
+        }
+      }
+
+      // Save to database if we found the student
+      if (studentDbId && currentAnswerKeyId) {
+        try {
+          await addExamResult({
+            student_id: studentDbId,
+            answer_key_id: currentAnswerKeyId,
+            answers: result.answers,
+            correct_count: correctCount,
+            incorrect_count: incorrectCount,
+            percentage: parseFloat(percentage.toFixed(2)),
+            exam_date: new Date().toISOString()
+          });
+        } catch (error) {
+          console.error("Error saving result to database:", error);
+        }
+      }
 
       setGradedSheets([newSheet, ...gradedSheets]);
       setActiveTab("results");

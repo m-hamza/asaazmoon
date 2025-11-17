@@ -30,279 +30,266 @@ import {
 import { School, Upload, UserPlus, Download, Plus, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { 
-  saveSchoolData, 
-  loadSchoolData, 
-  StoredSchool, 
-  StoredClass, 
-  StoredStudent 
-} from "@/lib/storage";
+import { useSchool } from "@/hooks/useSchool";
+import { useStudents } from "@/hooks/useStudents";
 import { AnswerSheetGenerator, downloadPDF } from "@/lib/answerSheetGenerator";
 
 export const StudentManagement = () => {
-  const [schoolInfo, setSchoolInfo] = useState<{ name: string; address: string; principal: string } | null>(null);
-  const [classes, setClasses] = useState<StoredClass[]>([]);
+  const { school, classes, loading: schoolLoading, saveSchool, addClass, deleteClass } = useSchool();
+  const { students, loading: studentsLoading, addStudent, addMultipleStudents, deleteStudent, refreshStudents, getAllStudents } = useStudents();
+  
   const [isSchoolDialogOpen, setIsSchoolDialogOpen] = useState(false);
   const [isAddClassDialogOpen, setIsAddClassDialogOpen] = useState(false);
   const [isManualEntryDialogOpen, setIsManualEntryDialogOpen] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   
-  // School info form
   const [schoolName, setSchoolName] = useState("");
   const [schoolAddress, setSchoolAddress] = useState("");
   const [schoolPrincipal, setSchoolPrincipal] = useState("");
-  
-  // Class form
   const [className, setClassName] = useState("");
-  
-  // Manual entry form
   const [manualStudentId, setManualStudentId] = useState("");
   const [manualFirstName, setManualFirstName] = useState("");
   const [manualLastName, setManualLastName] = useState("");
 
-  // Load data from localStorage on mount
   useEffect(() => {
-    const savedData = loadSchoolData();
-    if (savedData) {
-      setSchoolInfo({
-        name: savedData.name,
-        address: savedData.address || "",
-        principal: savedData.principal || ""
-      });
-      setClasses(savedData.classes);
-      setSchoolName(savedData.name);
-      setSchoolAddress(savedData.address || "");
-      setSchoolPrincipal(savedData.principal || "");
+    if (school) {
+      setSchoolName(school.name);
+      setSchoolAddress(school.address || "");
+      setSchoolPrincipal(school.principal || "");
     }
-  }, []);
+  }, [school]);
 
-  // Save to localStorage whenever data changes
   useEffect(() => {
-    if (schoolInfo || classes.length > 0) {
-      const dataToSave: StoredSchool = {
-        name: schoolInfo?.name || "",
-        address: schoolInfo?.address,
-        principal: schoolInfo?.principal,
-        classes
-      };
-      saveSchoolData(dataToSave);
+    if (selectedClassId) {
+      refreshStudents(selectedClassId);
     }
-  }, [schoolInfo, classes]);
+  }, [selectedClassId]);
 
-  const handleSchoolInfoSubmit = () => {
+  const handleSchoolInfoSubmit = async () => {
     if (!schoolName.trim()) {
       toast.error("نام مدرسه را وارد کنید");
       return;
     }
 
-    setSchoolInfo({
-      name: schoolName,
-      address: schoolAddress,
-      principal: schoolPrincipal,
-    });
-    setIsSchoolDialogOpen(false);
-    toast.success("اطلاعات مدرسه ثبت شد");
+    try {
+      await saveSchool({
+        name: schoolName,
+        address: schoolAddress || undefined,
+        principal: schoolPrincipal || undefined
+      });
+      setIsSchoolDialogOpen(false);
+    } catch (error) {
+      // Error handled in hook
+    }
   };
 
-  const handleAddClass = () => {
+  const handleAddClass = async () => {
     if (!className.trim()) {
-      toast.error("نام پایه را وارد کنید");
+      toast.error("نام کلاس را وارد کنید");
       return;
     }
 
-    const newClass: StoredClass = {
-      id: Date.now().toString(),
-      name: className,
-      grade: className,
-      students: [],
-    };
+    if (!school) {
+      toast.error("ابتدا اطلاعات مدرسه را ثبت کنید");
+      return;
+    }
 
-    setClasses([...classes, newClass]);
-    setClassName("");
-    setIsAddClassDialogOpen(false);
-    toast.success(`پایه ${className} اضافه شد`);
+    try {
+      await addClass({
+        school_id: school.id,
+        name: className,
+        grade: className
+      });
+      setClassName("");
+      setIsAddClassDialogOpen(false);
+    } catch (error) {
+      // Error handled in hook
+    }
   };
 
-  const handleDeleteClass = (classId: string) => {
-    setClasses(classes.filter((c) => c.id !== classId));
-    toast.success("پایه حذف شد");
-  };
-
-  const handleExcelUpload = (classId: string, event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
+  const handleDeleteClass = async (classId: string) => {
+    if (confirm("آیا از حذف این کلاس اطمینان دارید؟ تمام دانش‌آموزان این کلاس نیز حذف خواهند شد.")) {
       try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: "binary" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-        const students: StoredStudent[] = jsonData.map((row: any, index: number) => ({
-          id: `${classId}-${Date.now()}-${index}`,
-          studentId: row["کد داوطلبی"] || row["studentId"] || "",
-          firstName: row["نام"] || row["firstName"] || "",
-          lastName: row["نام خانوادگی"] || row["lastName"] || "",
-          className: classes.find(c => c.id === classId)?.name || ""
-        }));
-
-        setClasses(
-          classes.map((c) =>
-            c.id === classId ? { ...c, students: [...c.students, ...students] } : c
-          )
-        );
-
-        toast.success(`${students.length} دانش‌آموز به پایه اضافه شد`);
+        await deleteClass(classId);
+        if (selectedClassId === classId) {
+          setSelectedClassId("");
+        }
       } catch (error) {
-        console.error("Error reading Excel file:", error);
-        toast.error("خطا در خواندن فایل اکسل");
+        // Error handled in hook
       }
-    };
-    reader.readAsBinaryString(file);
-    event.target.value = "";
+    }
   };
 
-  const handleManualEntry = () => {
-    if (!selectedClassId) {
-      toast.error("ابتدا یک پایه انتخاب کنید");
-      return;
-    }
-
+  const handleManualEntry = async () => {
     if (!manualStudentId.trim() || !manualFirstName.trim() || !manualLastName.trim()) {
       toast.error("تمام فیلدها را پر کنید");
       return;
     }
 
-    const classData = classes.find(c => c.id === selectedClassId);
-    const newStudent: StoredStudent = {
-      id: `${selectedClassId}-${Date.now()}`,
-      studentId: manualStudentId,
-      firstName: manualFirstName,
-      lastName: manualLastName,
-      className: classData?.name || ""
-    };
+    if (!selectedClassId) {
+      toast.error("ابتدا یک کلاس انتخاب کنید");
+      return;
+    }
 
-    setClasses(
-      classes.map((c) =>
-        c.id === selectedClassId ? { ...c, students: [...c.students, newStudent] } : c
-      )
-    );
-
-    setManualStudentId("");
-    setManualFirstName("");
-    setManualLastName("");
-    setIsManualEntryDialogOpen(false);
-    toast.success("دانش‌آموز با موفقیت اضافه شد");
-  };
-
-  const handleDeleteStudent = (classId: string, studentId: string) => {
-    setClasses(
-      classes.map((c) =>
-        c.id === classId
-          ? { ...c, students: c.students.filter((s) => s.id !== studentId) }
-          : c
-      )
-    );
-    toast.success("دانش‌آموز حذف شد");
-  };
-
-  const exportToExcel = (classId?: string) => {
-    let dataToExport: any[] = [];
-
-    if (classId) {
-      // Export specific class
-      const selectedClass = classes.find((c) => c.id === classId);
-      if (selectedClass) {
-        dataToExport = selectedClass.students.map((s) => ({
-          "کد داوطلبی": s.studentId,
-          نام: s.firstName,
-          "نام خانوادگی": s.lastName,
-          پایه: selectedClass.name,
-        }));
-      }
-    } else {
-      // Export all classes
-      classes.forEach((cls) => {
-        cls.students.forEach((s) => {
-          dataToExport.push({
-            "کد داوطلبی": s.studentId,
-            نام: s.firstName,
-            "نام خانوادگی": s.lastName,
-            پایه: cls.name,
-          });
-        });
+    try {
+      await addStudent({
+        class_id: selectedClassId,
+        student_id: manualStudentId,
+        first_name: manualFirstName,
+        last_name: manualLastName
       });
+      
+      setManualStudentId("");
+      setManualFirstName("");
+      setManualLastName("");
+      setIsManualEntryDialogOpen(false);
+    } catch (error) {
+      // Error handled in hook
     }
-
-    if (dataToExport.length === 0) {
-      toast.error("داده‌ای برای خروجی وجود ندارد");
-      return;
-    }
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Students");
-
-    const fileName = classId
-      ? `${classes.find((c) => c.id === classId)?.name || "class"}_students.xlsx`
-      : "all_students.xlsx";
-
-    XLSX.writeFile(workbook, fileName);
-    toast.success("فایل اکسل ذخیره شد");
   };
 
-  const handleGenerateAnswerSheets = async (classId: string) => {
-    const classData = classes.find((c) => c.id === classId);
-    if (!classData || classData.students.length === 0) {
-      toast.error("این پایه هیچ دانش‌آموزی ندارد");
+  const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!selectedClassId) {
+      toast.error("ابتدا یک کلاس انتخاب کنید");
+      event.target.value = "";
       return;
     }
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+      const studentsData = jsonData.map((row) => ({
+        class_id: selectedClassId,
+        student_id: String(row["کد داوطلبی"] || row["student_id"] || ""),
+        first_name: String(row["نام"] || row["first_name"] || ""),
+        last_name: String(row["نام خانوادگی"] || row["last_name"] || "")
+      })).filter(s => s.student_id && s.first_name && s.last_name);
+
+      if (studentsData.length === 0) {
+        toast.error("هیچ داده معتبری یافت نشد");
+        event.target.value = "";
+        return;
+      }
+
+      await addMultipleStudents(studentsData);
+      event.target.value = "";
+    } catch (error) {
+      console.error("Error processing Excel:", error);
+      toast.error("خطا در پردازش فایل اکسل");
+      event.target.value = "";
+    }
+  };
+
+  const handleExportClass = async () => {
+    if (!selectedClassId) {
+      toast.error("ابتدا یک کلاس انتخاب کنید");
+      return;
+    }
+
+    const classData = classes.find(c => c.id === selectedClassId);
+    if (!classData) return;
+    
+    const ws = XLSX.utils.json_to_sheet(
+      students.map(s => ({
+        "کد داوطلبی": s.student_id,
+        "نام": s.first_name,
+        "نام خانوادگی": s.last_name,
+        "کلاس": classData.name
+      }))
+    );
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Students");
+    XLSX.writeFile(wb, `${classData.name}_students.xlsx`);
+    toast.success("فایل با موفقیت دانلود شد");
+  };
+
+  const handleExportAll = async () => {
+    const allStudents = await getAllStudents();
+    
+    const studentsWithClass = allStudents.map(s => {
+      const studentClass = classes.find(c => c.id === s.class_id);
+      return {
+        "کد داوطلبی": s.student_id,
+        "نام": s.first_name,
+        "نام خانوادگی": s.last_name,
+        "کلاس": studentClass?.name || "نامشخص"
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(studentsWithClass);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "All Students");
+    XLSX.writeFile(wb, `${school?.name || "school"}_all_students.xlsx`);
+    toast.success("فایل با موفقیت دانلود شد");
+  };
+
+  const handleGenerateAnswerSheet = async (studentId: string) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
 
     setIsGeneratingPDF(true);
     try {
       const generator = new AnswerSheetGenerator({
-        numQuestions: 50,
-        questionsPerColumn: 25,
-        optionsPerQuestion: 4,
-        schoolName: schoolInfo?.name,
-        examTitle: "آزمون"
+        schoolName: school?.name,
+        examTitle: "پاسخنامه آزمون"
       });
 
-      const pdfBlob = await generator.generateForMultipleStudents(classData.students);
-      downloadPDF(pdfBlob, `پاسخبرگ_${classData.name}.pdf`);
-      toast.success(`${classData.students.length} پاسخبرگ تولید شد`);
+      const pdfBlob = await generator.generateForStudent({
+        id: student.id,
+        studentId: student.student_id,
+        firstName: student.first_name,
+        lastName: student.last_name,
+        className: classes.find(c => c.id === student.class_id)?.name || ""
+      });
+
+      downloadPDF(pdfBlob, `answer-sheet-${student.student_id}.pdf`);
+      toast.success("پاسخبرگ با موفقیت دانلود شد");
     } catch (error) {
-      console.error("Error generating answer sheets:", error);
-      toast.error("خطا در تولید پاسخبرگ‌ها");
+      console.error("Error generating answer sheet:", error);
+      toast.error("خطا در تولید پاسخبرگ");
     } finally {
       setIsGeneratingPDF(false);
     }
   };
 
   const handleGenerateAllAnswerSheets = async () => {
-    const allStudents = classes.flatMap(c => c.students);
-    if (allStudents.length === 0) {
-      toast.error("هیچ دانش‌آموزی ثبت نشده است");
+    if (!selectedClassId) {
+      toast.error("ابتدا یک کلاس انتخاب کنید");
+      return;
+    }
+
+    const classData = classes.find(c => c.id === selectedClassId);
+    if (!classData || students.length === 0) {
+      toast.error("دانش‌آموزی برای این کلاس وجود ندارد");
       return;
     }
 
     setIsGeneratingPDF(true);
     try {
       const generator = new AnswerSheetGenerator({
-        numQuestions: 50,
-        questionsPerColumn: 25,
-        optionsPerQuestion: 4,
-        schoolName: schoolInfo?.name,
-        examTitle: "آزمون"
+        schoolName: school?.name,
+        examTitle: "پاسخنامه آزمون"
       });
 
-      const pdfBlob = await generator.generateForMultipleStudents(allStudents);
-      downloadPDF(pdfBlob, `پاسخبرگ_همه_دانش‌آموزان.pdf`);
-      toast.success(`${allStudents.length} پاسخبرگ تولید شد`);
+      const studentsData = students.map(s => ({
+        id: s.id,
+        studentId: s.student_id,
+        firstName: s.first_name,
+        lastName: s.last_name,
+        className: classData.name
+      }));
+
+      const pdfBlob = await generator.generateForMultipleStudents(studentsData);
+      downloadPDF(pdfBlob, `answer-sheets-${classData.name}.pdf`);
+      toast.success(`${students.length} پاسخبرگ با موفقیت دانلود شد`);
     } catch (error) {
       console.error("Error generating answer sheets:", error);
       toast.error("خطا در تولید پاسخبرگ‌ها");
@@ -311,11 +298,12 @@ export const StudentManagement = () => {
     }
   };
 
-  const totalStudents = classes.reduce((sum, c) => sum + c.students.length, 0);
+  if (schoolLoading) {
+    return <div className="flex justify-center p-8">در حال بارگذاری...</div>;
+  }
 
   return (
     <div className="space-y-6">
-      {/* School Info Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -323,15 +311,15 @@ export const StudentManagement = () => {
             اطلاعات مدرسه
           </CardTitle>
           <CardDescription>
-            ابتدا اطلاعات مدرسه را وارد کنید
+            {school ? "اطلاعات مدرسه ثبت شده است" : "ابتدا اطلاعات مدرسه را وارد کنید"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {schoolInfo ? (
+          {school ? (
             <div className="space-y-2">
-              <p><strong>نام مدرسه:</strong> {schoolInfo.name}</p>
-              <p><strong>آدرس:</strong> {schoolInfo.address || "ندارد"}</p>
-              <p><strong>مدیر:</strong> {schoolInfo.principal || "ندارد"}</p>
+              <p><strong>نام مدرسه:</strong> {school.name}</p>
+              {school.address && <p><strong>آدرس:</strong> {school.address}</p>}
+              {school.principal && <p><strong>مدیر:</strong> {school.principal}</p>}
             </div>
           ) : (
             <p className="text-muted-foreground">هنوز اطلاعاتی ثبت نشده است</p>
@@ -340,40 +328,36 @@ export const StudentManagement = () => {
         <CardFooter>
           <Dialog open={isSchoolDialogOpen} onOpenChange={setIsSchoolDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
-                {schoolInfo ? "ویرایش اطلاعات" : "ثبت اطلاعات مدرسه"}
-              </Button>
+              <Button>{school ? "ویرایش اطلاعات" : "ثبت اطلاعات مدرسه"}</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>اطلاعات مدرسه</DialogTitle>
-                <DialogDescription>
-                  اطلاعات مدرسه را وارد کنید
-                </DialogDescription>
+                <DialogDescription>اطلاعات مدرسه را وارد کنید</DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="school-name">نام مدرسه *</Label>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="schoolName">نام مدرسه *</Label>
                   <Input
-                    id="school-name"
+                    id="schoolName"
                     value={schoolName}
                     onChange={(e) => setSchoolName(e.target.value)}
-                    placeholder="مثال: دبیرستان شهید بهشتی"
+                    placeholder="مثال: دبیرستان علامه طباطبایی"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="school-address">آدرس</Label>
+                <div>
+                  <Label htmlFor="schoolAddress">آدرس</Label>
                   <Input
-                    id="school-address"
+                    id="schoolAddress"
                     value={schoolAddress}
                     onChange={(e) => setSchoolAddress(e.target.value)}
                     placeholder="آدرس مدرسه"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="school-principal">نام مدیر</Label>
+                <div>
+                  <Label htmlFor="schoolPrincipal">نام مدیر</Label>
                   <Input
-                    id="school-principal"
+                    id="schoolPrincipal"
                     value={schoolPrincipal}
                     onChange={(e) => setSchoolPrincipal(e.target.value)}
                     placeholder="نام مدیر مدرسه"
@@ -381,181 +365,70 @@ export const StudentManagement = () => {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleSchoolInfoSubmit}>ثبت اطلاعات</Button>
+                <Button onClick={handleSchoolInfoSubmit}>ذخیره</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </CardFooter>
       </Card>
 
-      {/* Classes Management */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>مدیریت پایه‌ها</CardTitle>
-              <CardDescription>
-                پایه‌های تحصیلی را اضافه و مدیریت کنید
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Dialog open={isAddClassDialogOpen} onOpenChange={setIsAddClassDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    افزودن پایه
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>افزودن پایه جدید</DialogTitle>
-                    <DialogDescription>
-                      نام پایه تحصیلی را وارد کنید
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="class-name">نام پایه *</Label>
-                      <Input
-                        id="class-name"
-                        value={className}
-                        onChange={(e) => setClassName(e.target.value)}
-                        placeholder="مثال: پایه هفتم"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button onClick={handleAddClass}>افزودن پایه</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
-              {classes.length > 0 && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportToExcel()}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    خروجی کلی
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateAllAnswerSheets}
-                    disabled={isGeneratingPDF}
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
-                    {isGeneratingPDF ? "در حال تولید..." : "پاسخبرگ کلی"}
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
+          <CardTitle>مدیریت کلاس‌ها</CardTitle>
+          <CardDescription>کلاس‌های مدرسه را اضافه و مدیریت کنید</CardDescription>
         </CardHeader>
-        <CardContent>
-          {classes.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              هنوز پایه‌ای اضافه نشده است
-            </p>
-          ) : (
-            <div className="space-y-6">
+        <CardContent className="space-y-4">
+          <Dialog open={isAddClassDialogOpen} onOpenChange={setIsAddClassDialogOpen}>
+            <DialogTrigger asChild>
+              <Button disabled={!school}>
+                <Plus className="h-4 w-4 mr-2" />
+                افزودن کلاس
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>افزودن کلاس جدید</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="className">نام کلاس *</Label>
+                  <Input
+                    id="className"
+                    value={className}
+                    onChange={(e) => setClassName(e.target.value)}
+                    placeholder="مثال: پایه هفتم"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleAddClass}>افزودن</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {classes.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {classes.map((cls) => (
                 <Card key={cls.id}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{cls.name}</CardTitle>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => exportToExcel(cls.id)}
-                          disabled={cls.students.length === 0}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          خروجی
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerateAnswerSheets(cls.id)}
-                          disabled={cls.students.length === 0 || isGeneratingPDF}
-                        >
-                          <FileText className="h-4 w-4 mr-2" />
-                          پاسخبرگ
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedClassId(cls.id);
-                            setIsManualEntryDialogOpen(true);
-                          }}
-                        >
-                          <UserPlus className="h-4 w-4 mr-2" />
-                          ثبت دستی
-                        </Button>
-                        <label htmlFor={`upload-${cls.id}`}>
-                          <Button variant="outline" size="sm" asChild>
-                            <span>
-                              <Upload className="h-4 w-4 mr-2" />
-                              آپلود اکسل
-                            </span>
-                          </Button>
-                          <input
-                            id={`upload-${cls.id}`}
-                            type="file"
-                            accept=".xlsx,.xls"
-                            className="hidden"
-                            onChange={(e) => handleExcelUpload(cls.id, e)}
-                          />
-                        </label>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteClass(cls.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <CardDescription>
-                      تعداد دانش‌آموزان: {cls.students.length}
-                    </CardDescription>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">{cls.name}</CardTitle>
                   </CardHeader>
-                  {cls.students.length > 0 && (
-                    <CardContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>کد داوطلبی</TableHead>
-                            <TableHead>نام</TableHead>
-                            <TableHead>نام خانوادگی</TableHead>
-                            <TableHead className="text-left">عملیات</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {cls.students.map((student) => (
-                            <TableRow key={student.id}>
-                              <TableCell>{student.studentId}</TableCell>
-                              <TableCell>{student.firstName}</TableCell>
-                              <TableCell>{student.lastName}</TableCell>
-                              <TableCell className="text-left">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteStudent(cls.id, student.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  )}
+                  <CardFooter className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant={selectedClassId === cls.id ? "default" : "outline"}
+                      onClick={() => setSelectedClassId(cls.id)}
+                    >
+                      انتخاب
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleDeleteClass(cls.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </CardFooter>
                 </Card>
               ))}
             </div>
@@ -563,49 +436,151 @@ export const StudentManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Manual Entry Dialog */}
-      <Dialog open={isManualEntryDialogOpen} onOpenChange={setIsManualEntryDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>ثبت دستی دانش‌آموز</DialogTitle>
-            <DialogDescription>
-              اطلاعات دانش‌آموز را وارد کنید
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="manual-student-id">کد داوطلبی *</Label>
-              <Input
-                id="manual-student-id"
-                value={manualStudentId}
-                onChange={(e) => setManualStudentId(e.target.value)}
-                placeholder="کد داوطلبی"
-              />
+      {selectedClassId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              دانش‌آموزان کلاس {classes.find(c => c.id === selectedClassId)?.name}
+            </CardTitle>
+            <CardDescription>مدیریت دانش‌آموزان این کلاس</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Dialog open={isManualEntryDialogOpen} onOpenChange={setIsManualEntryDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    ثبت دستی
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>ثبت دانش‌آموز</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="studentId">کد داوطلبی *</Label>
+                      <Input
+                        id="studentId"
+                        value={manualStudentId}
+                        onChange={(e) => setManualStudentId(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="firstName">نام *</Label>
+                      <Input
+                        id="firstName"
+                        value={manualFirstName}
+                        onChange={(e) => setManualFirstName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="lastName">نام خانوادگی *</Label>
+                      <Input
+                        id="lastName"
+                        value={manualLastName}
+                        onChange={(e) => setManualLastName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={handleManualEntry}>ثبت</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Button variant="outline" asChild>
+                <label className="cursor-pointer">
+                  <Upload className="h-4 w-4 mr-2" />
+                  آپلود اکسل
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleExcelUpload}
+                    className="hidden"
+                  />
+                </label>
+              </Button>
+
+              <Button variant="outline" onClick={handleExportClass}>
+                <Download className="h-4 w-4 mr-2" />
+                خروجی اکسل
+              </Button>
+
+              <Button 
+                variant="outline" 
+                onClick={handleGenerateAllAnswerSheets}
+                disabled={isGeneratingPDF || students.length === 0}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                {isGeneratingPDF ? "در حال تولید..." : "تولید پاسخبرگ همه"}
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="manual-first-name">نام *</Label>
-              <Input
-                id="manual-first-name"
-                value={manualFirstName}
-                onChange={(e) => setManualFirstName(e.target.value)}
-                placeholder="نام"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="manual-last-name">نام خانوادگی *</Label>
-              <Input
-                id="manual-last-name"
-                value={manualLastName}
-                onChange={(e) => setManualLastName(e.target.value)}
-                placeholder="نام خانوادگی"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleManualEntry}>افزودن دانش‌آموز</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+            {studentsLoading ? (
+              <div className="text-center p-4">در حال بارگذاری...</div>
+            ) : students.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>کد داوطلبی</TableHead>
+                    <TableHead>نام</TableHead>
+                    <TableHead>نام خانوادگی</TableHead>
+                    <TableHead>عملیات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {students.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell>{student.student_id}</TableCell>
+                      <TableCell>{student.first_name}</TableCell>
+                      <TableCell>{student.last_name}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleGenerateAnswerSheet(student.id)}
+                            disabled={isGeneratingPDF}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteStudent(student.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-center text-muted-foreground p-4">
+                هنوز دانش‌آموزی ثبت نشده است
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {classes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>خروجی کلی</CardTitle>
+            <CardDescription>دریافت لیست تمام دانش‌آموزان مدرسه</CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button onClick={handleExportAll}>
+              <Download className="h-4 w-4 mr-2" />
+              خروجی اکسل کل مدرسه
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
     </div>
   );
 };
