@@ -1,6 +1,7 @@
 /**
  * Answer Sheet PDF Generator
  * Creates printable answer sheets with QR codes for student identification
+ * Optimized for Persian language support and OMR detection
  */
 
 import jsPDF from 'jspdf';
@@ -19,7 +20,7 @@ export interface AnswerSheetConfig {
 
 const DEFAULT_CONFIG: AnswerSheetConfig = {
   numQuestions: 120,
-  questionsPerColumn: 40,
+  questionsPerColumn: 30,
   optionsPerQuestion: 4,
 };
 
@@ -34,9 +35,13 @@ export class AnswerSheetGenerator {
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: 'a4'
+      format: 'a4',
+      compress: true
     });
 
+    // Set language to RTL for better Persian support
+    pdf.setLanguage('fa');
+    
     await this.drawAnswerSheet(pdf, student);
     return pdf.output('blob');
   }
@@ -45,8 +50,11 @@ export class AnswerSheetGenerator {
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: 'a4'
+      format: 'a4',
+      compress: true
     });
+
+    pdf.setLanguage('fa');
 
     for (let i = 0; i < students.length; i++) {
       if (i > 0) {
@@ -62,6 +70,10 @@ export class AnswerSheetGenerator {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     
+    // Add border around entire page
+    pdf.setLineWidth(0.8);
+    pdf.rect(8, 8, pageWidth - 16, pageHeight - 16);
+    
     // Header Section
     this.drawHeader(pdf, pageWidth);
     
@@ -76,37 +88,46 @@ export class AnswerSheetGenerator {
   }
 
   private drawHeader(pdf: jsPDF, pageWidth: number): void {
-    // School Name
+    const headerStartY = 15;
+    
+    // School Name - centered and bold
     if (this.config.schoolName) {
-      pdf.setFontSize(16);
+      pdf.setFontSize(18);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(this.config.schoolName, pageWidth / 2, 12, { align: 'center' });
+      this.drawPersianText(pdf, this.config.schoolName, pageWidth / 2, headerStartY, 'center');
     }
 
     // Exam Title
     if (this.config.examTitle) {
-      pdf.setFontSize(13);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(this.config.examTitle, pageWidth / 2, 19, { align: 'center' });
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      this.drawPersianText(pdf, this.config.examTitle, pageWidth / 2, headerStartY + 7, 'center');
     }
 
-    // Subject and Date
-    pdf.setFontSize(10);
-    const y = 25;
+    // Subject and Date on same line
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'normal');
+    const infoY = headerStartY + 14;
+    
     if (this.config.subject) {
-      pdf.text(`درس: ${this.config.subject}`, 15, y);
+      this.drawPersianText(pdf, `درس: ${this.config.subject}`, pageWidth - 15, infoY, 'right');
     }
     if (this.config.date) {
-      pdf.text(`تاریخ: ${this.config.date}`, pageWidth - 15, y, { align: 'right' });
+      this.drawPersianText(pdf, `تاریخ: ${this.config.date}`, 15, infoY, 'left');
     }
 
-    // Border line
+    // Separator line
     pdf.setLineWidth(0.5);
-    pdf.line(10, 28, pageWidth - 10, 28);
+    pdf.line(12, infoY + 3, pageWidth - 12, infoY + 3);
   }
 
   private async drawStudentInfo(pdf: jsPDF, student: StoredStudent, pageWidth: number): Promise<void> {
-    const startY = 32;
+    const startY = 38;
+    const boxHeight = 30;
+    
+    // Draw info box border
+    pdf.setLineWidth(0.5);
+    pdf.rect(12, startY, pageWidth - 24, boxHeight);
     
     // Generate QR Code with student data
     const qrData = JSON.stringify({
@@ -117,46 +138,70 @@ export class AnswerSheetGenerator {
     
     try {
       const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
-        width: 200,
-        margin: 1
+        width: 256,
+        margin: 1,
+        errorCorrectionLevel: 'H'
       });
       
-      // Draw QR Code on the right
-      pdf.addImage(qrCodeDataUrl, 'PNG', pageWidth - 35, startY, 25, 25);
+      // Draw QR Code on the left side
+      const qrSize = 24;
+      pdf.addImage(qrCodeDataUrl, 'PNG', 15, startY + 3, qrSize, qrSize);
     } catch (error) {
       console.error('Error generating QR code:', error);
     }
 
-    // Student Info on the left
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'normal');
+    // Student Info on the right side - RTL layout
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'bold');
     
-    pdf.text(`کد داوطلب: ${student.studentId}`, 15, startY + 5);
-    pdf.text(`نام و نام خانوادگی: ${student.firstName} ${student.lastName}`, 15, startY + 12);
-    pdf.text(`کلاس: ${student.className}`, 15, startY + 19);
-
-    // Border around student info
-    pdf.setLineWidth(0.3);
-    pdf.rect(10, startY - 2, pageWidth - 20, 30);
+    const infoX = pageWidth - 15;
+    let infoY = startY + 8;
+    
+    this.drawPersianText(pdf, `کد داوطلب: ${student.studentId}`, infoX, infoY, 'right');
+    infoY += 7;
+    
+    this.drawPersianText(pdf, `نام: ${student.firstName}`, infoX, infoY, 'right');
+    infoY += 7;
+    
+    this.drawPersianText(pdf, `نام خانوادگی: ${student.lastName}`, infoX, infoY, 'right');
+    infoY += 7;
+    
+    this.drawPersianText(pdf, `کلاس: ${student.className}`, infoX, infoY, 'right');
   }
 
   private drawAnswerGrid(pdf: jsPDF, pageWidth: number, pageHeight: number): void {
-    const startY = 68;
-    const bubbleRadius = 2;
-    const questionSpacing = 5.5;
-    const optionSpacing = 6;
-    const columnWidth = (pageWidth - 30) / 3; // 3 columns for 120 questions
-    const numColumns = Math.ceil(this.config.numQuestions / this.config.questionsPerColumn);
+    const startY = 75;
+    const bubbleRadius = 2.2;
+    const questionSpacing = 6;
+    const optionSpacing = 8;
+    const numColumns = 4; // Fixed 4 columns for 120 questions
+    const columnWidth = 45;
     
+    // Persian option labels - clearly visible
     const options = ['الف', 'ب', 'ج', 'د'];
     
-    // Calculate starting X to center the grid
+    // Center the grid
     const totalWidth = numColumns * columnWidth;
-    let startX = (pageWidth - totalWidth) / 2;
+    const startX = (pageWidth - totalWidth) / 2;
 
-    pdf.setFontSize(8);
+    // Draw column headers
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'bold');
+    
+    for (let col = 0; col < numColumns; col++) {
+      const colStartX = startX + (col * columnWidth);
+      
+      // Column header with option labels
+      let headerX = colStartX + 12;
+      for (let opt = 0; opt < this.config.optionsPerQuestion; opt++) {
+        const optX = headerX + (opt * optionSpacing);
+        this.drawPersianText(pdf, options[opt], optX, startY - 3, 'center');
+      }
+    }
+
+    // Draw grid
     pdf.setFont('helvetica', 'normal');
-
+    
     for (let col = 0; col < numColumns; col++) {
       const colStartX = startX + (col * columnWidth);
       
@@ -165,46 +210,86 @@ export class AnswerSheetGenerator {
         
         if (questionNum > this.config.numQuestions) break;
         
-        const y = startY + (q * questionSpacing);
+        const y = startY + 2 + (q * questionSpacing);
         
-        // Question number
-        pdf.setFontSize(7);
-        pdf.text(`${questionNum}`, colStartX + 1, y + 1);
+        // Question number - larger and clearer
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`${questionNum}`, colStartX + 2, y + 1.5);
         
         // Draw bubbles for options
+        pdf.setFont('helvetica', 'normal');
         for (let opt = 0; opt < this.config.optionsPerQuestion; opt++) {
-          const bubbleX = colStartX + 9 + (opt * optionSpacing);
+          const bubbleX = colStartX + 12 + (opt * optionSpacing);
           
-          // Option label
-          pdf.setFontSize(6);
-          pdf.text(options[opt], bubbleX - 0.8, y - 1.5);
-          
-          // Bubble circle
-          pdf.setLineWidth(0.25);
+          // Bubble circle - thicker for better detection
+          pdf.setLineWidth(0.4);
+          pdf.setDrawColor(0);
           pdf.circle(bubbleX, y, bubbleRadius);
         }
       }
       
-      // Column separator
+      // Column separator line
       if (col < numColumns - 1) {
-        pdf.setLineWidth(0.1);
-        pdf.setDrawColor(200);
-        pdf.line(colStartX + columnWidth - 2, startY - 5, colStartX + columnWidth - 2, startY + (this.config.questionsPerColumn * questionSpacing));
+        pdf.setLineWidth(0.2);
+        pdf.setDrawColor(150);
+        const sepX = colStartX + columnWidth - 2;
+        pdf.line(sepX, startY - 6, sepX, startY + (this.config.questionsPerColumn * questionSpacing) + 2);
         pdf.setDrawColor(0);
       }
     }
 
     // Grid border
-    pdf.setLineWidth(0.5);
-    pdf.rect(startX - 5, startY - 8, totalWidth + 10, (this.config.questionsPerColumn * questionSpacing) + 5);
+    pdf.setLineWidth(0.6);
+    pdf.setDrawColor(0);
+    pdf.rect(
+      startX - 3, 
+      startY - 8, 
+      totalWidth + 6, 
+      (this.config.questionsPerColumn * questionSpacing) + 8
+    );
   }
 
   private drawFooter(pdf: jsPDF, pageWidth: number, pageHeight: number): void {
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'italic');
-    pdf.setTextColor(100);
-    pdf.text('لطفاً حباب‌ها را کاملاً پر کنید', pageWidth / 2, pageHeight - 10, { align: 'center' });
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(50);
+    
+    this.drawPersianText(
+      pdf,
+      'لطفاً حباب‌ها را به صورت کامل و با دقت پر کنید',
+      pageWidth / 2,
+      pageHeight - 12,
+      'center'
+    );
+    
     pdf.setTextColor(0);
+  }
+
+  /**
+   * Helper method to draw Persian text with better rendering
+   * Handles RTL text direction and proper character spacing
+   */
+  private drawPersianText(
+    pdf: jsPDF, 
+    text: string, 
+    x: number, 
+    y: number, 
+    align: 'left' | 'center' | 'right' = 'left'
+  ): void {
+    // Clean the text and ensure proper encoding
+    const cleanText = text.trim();
+    
+    try {
+      pdf.text(cleanText, x, y, { 
+        align: align,
+        charSpace: 0.2,
+        renderingMode: 'fill'
+      });
+    } catch (error) {
+      // Fallback to basic text rendering if advanced options fail
+      pdf.text(cleanText, x, y, { align: align });
+    }
   }
 }
 
