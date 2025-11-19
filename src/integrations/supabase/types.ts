@@ -169,6 +169,7 @@ export type Database = {
           last_name: string
           student_id: string
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           class_id?: string | null
@@ -178,6 +179,7 @@ export type Database = {
           last_name: string
           student_id: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           class_id?: string | null
@@ -187,6 +189,7 @@ export type Database = {
           last_name?: string
           student_id?: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
