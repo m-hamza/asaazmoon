@@ -7,6 +7,7 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { StoredStudent } from './storage';
+import { loadVazirmFontBase64 } from './fonts/vazirmatn-base64';
 
 export interface AnswerSheetConfig {
   numQuestions: number;
@@ -26,9 +27,28 @@ const DEFAULT_CONFIG: AnswerSheetConfig = {
 
 export class AnswerSheetGenerator {
   private config: AnswerSheetConfig;
+  private fontLoaded: boolean = false;
 
   constructor(config: Partial<AnswerSheetConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /**
+   * Load Persian font into jsPDF
+   */
+  private async loadPersianFont(pdf: jsPDF): Promise<void> {
+    if (this.fontLoaded) return;
+    
+    try {
+      const fontBase64 = await loadVazirmFontBase64();
+      pdf.addFileToVFS('Vazirmatn-Regular.ttf', fontBase64);
+      pdf.addFont('Vazirmatn-Regular.ttf', 'Vazirmatn', 'normal');
+      pdf.addFont('Vazirmatn-Regular.ttf', 'Vazirmatn', 'bold');
+      this.fontLoaded = true;
+    } catch (error) {
+      console.error('Failed to load Persian font:', error);
+      throw new Error('فونت فارسی بارگذاری نشد');
+    }
   }
 
   async generateForStudent(student: StoredStudent): Promise<Blob> {
@@ -39,8 +59,9 @@ export class AnswerSheetGenerator {
       compress: true
     });
 
-    // Set language to RTL for better Persian support
-    pdf.setLanguage('fa');
+    // Load Persian font first
+    await this.loadPersianFont(pdf);
+    pdf.setFont('Vazirmatn', 'normal');
     
     await this.drawAnswerSheet(pdf, student);
     return pdf.output('blob');
@@ -54,11 +75,14 @@ export class AnswerSheetGenerator {
       compress: true
     });
 
-    pdf.setLanguage('fa');
+    // Load Persian font once for all pages
+    await this.loadPersianFont(pdf);
+    pdf.setFont('Vazirmatn', 'normal');
 
     for (let i = 0; i < students.length; i++) {
       if (i > 0) {
         pdf.addPage();
+        pdf.setFont('Vazirmatn', 'normal');
       }
       await this.drawAnswerSheet(pdf, students[i]);
     }
@@ -93,20 +117,20 @@ export class AnswerSheetGenerator {
     // School Name - centered and bold
     if (this.config.schoolName) {
       pdf.setFontSize(18);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('Vazirmatn', 'bold');
       this.drawPersianText(pdf, this.config.schoolName, pageWidth / 2, headerStartY, 'center');
     }
 
     // Exam Title
     if (this.config.examTitle) {
       pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('Vazirmatn', 'bold');
       this.drawPersianText(pdf, this.config.examTitle, pageWidth / 2, headerStartY + 7, 'center');
     }
 
     // Subject and Date on same line
     pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('Vazirmatn', 'normal');
     const infoY = headerStartY + 14;
     
     if (this.config.subject) {
@@ -152,7 +176,7 @@ export class AnswerSheetGenerator {
 
     // Student Info on the right side - RTL layout
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('Vazirmatn', 'bold');
     
     const infoX = pageWidth - 15;
     let infoY = startY + 8;
@@ -186,7 +210,7 @@ export class AnswerSheetGenerator {
 
     // Draw column headers
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('Vazirmatn', 'bold');
     
     for (let col = 0; col < numColumns; col++) {
       const colStartX = startX + (col * columnWidth);
@@ -200,7 +224,7 @@ export class AnswerSheetGenerator {
     }
 
     // Draw grid
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('Vazirmatn', 'normal');
     
     for (let col = 0; col < numColumns; col++) {
       const colStartX = startX + (col * columnWidth);
@@ -214,11 +238,11 @@ export class AnswerSheetGenerator {
         
         // Question number - larger and clearer
         pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('Vazirmatn', 'bold');
         pdf.text(`${questionNum}`, colStartX + 2, y + 1.5);
         
         // Draw bubbles for options
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('Vazirmatn', 'normal');
         for (let opt = 0; opt < this.config.optionsPerQuestion; opt++) {
           const bubbleX = colStartX + 12 + (opt * optionSpacing);
           
@@ -252,7 +276,7 @@ export class AnswerSheetGenerator {
 
   private drawFooter(pdf: jsPDF, pageWidth: number, pageHeight: number): void {
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('Vazirmatn', 'bold');
     pdf.setTextColor(50);
     
     this.drawPersianText(
