@@ -23,6 +23,10 @@ const DEFAULT_CONFIG: AnswerSheetConfig = {
   numQuestions: 120,
   questionsPerColumn: 30,
   optionsPerQuestion: 4,
+  schoolName: 'آزمون جامع مدرسه فرهیختگان چاراویماق',
+  examTitle: '',
+  subject: '',
+  date: '',
 };
 
 export class AnswerSheetGenerator {
@@ -112,26 +116,26 @@ export class AnswerSheetGenerator {
   }
 
   private drawHeader(pdf: jsPDF, pageWidth: number): void {
-    const headerStartY = 15;
+    const headerStartY = 18;
     
-    // School Name - centered and bold
+    // School Name - centered and bold with larger font
     if (this.config.schoolName) {
-      pdf.setFontSize(18);
+      pdf.setFontSize(16);
       pdf.setFont('Vazirmatn', 'bold');
       this.drawPersianText(pdf, this.config.schoolName, pageWidth / 2, headerStartY, 'center');
     }
 
     // Exam Title
     if (this.config.examTitle) {
-      pdf.setFontSize(14);
+      pdf.setFontSize(13);
       pdf.setFont('Vazirmatn', 'bold');
-      this.drawPersianText(pdf, this.config.examTitle, pageWidth / 2, headerStartY + 7, 'center');
+      this.drawPersianText(pdf, this.config.examTitle, pageWidth / 2, headerStartY + 8, 'center');
     }
 
     // Subject and Date on same line
-    pdf.setFontSize(11);
+    pdf.setFontSize(10);
     pdf.setFont('Vazirmatn', 'normal');
-    const infoY = headerStartY + 14;
+    const infoY = headerStartY + 15;
     
     if (this.config.subject) {
       this.drawPersianText(pdf, `درس: ${this.config.subject}`, pageWidth - 15, infoY, 'right');
@@ -141,13 +145,13 @@ export class AnswerSheetGenerator {
     }
 
     // Separator line
-    pdf.setLineWidth(0.5);
-    pdf.line(12, infoY + 3, pageWidth - 12, infoY + 3);
+    pdf.setLineWidth(0.6);
+    pdf.line(10, infoY + 4, pageWidth - 10, infoY + 4);
   }
 
   private async drawStudentInfo(pdf: jsPDF, student: StoredStudent, pageWidth: number): Promise<void> {
-    const startY = 38;
-    const boxHeight = 30;
+    const startY = 42;
+    const boxHeight = 28;
     
     // Draw info box border
     pdf.setLineWidth(0.5);
@@ -194,12 +198,12 @@ export class AnswerSheetGenerator {
   }
 
   private drawAnswerGrid(pdf: jsPDF, pageWidth: number, pageHeight: number): void {
-    const startY = 75;
-    const bubbleRadius = 2.2;
-    const questionSpacing = 6;
-    const optionSpacing = 8;
+    const startY = 78;
+    const bubbleRadius = 2.3;
+    const questionSpacing = 6.2;
+    const optionSpacing = 8.5;
     const numColumns = 4; // Fixed 4 columns for 120 questions
-    const columnWidth = 45;
+    const columnWidth = 46;
     
     // Persian option labels - clearly visible
     const options = ['الف', 'ب', 'ج', 'د'];
@@ -279,11 +283,61 @@ export class AnswerSheetGenerator {
     pdf.setFont('Vazirmatn', 'bold');
     pdf.setTextColor(50);
     
+    let footerY = pageHeight - 28;
+    
+    // Instructions header
     this.drawPersianText(
       pdf,
-      'لطفاً حباب‌ها را به صورت کامل و با دقت پر کنید',
+      'توصیه‌های آزمون:',
       pageWidth / 2,
-      pageHeight - 12,
+      footerY,
+      'center'
+    );
+    
+    footerY += 5;
+    pdf.setFontSize(8);
+    pdf.setFont('Vazirmatn', 'normal');
+    
+    // Instruction 1
+    this.drawPersianText(
+      pdf,
+      '• لطفاً حباب‌ها را به صورت کامل و با دقت پر کنید',
+      pageWidth / 2,
+      footerY,
+      'center'
+    );
+    
+    footerY += 4.5;
+    // Instruction 2
+    this.drawPersianText(
+      pdf,
+      '• از پاک کردن یا خط زدن حباب‌ها خودداری کنید',
+      pageWidth / 2,
+      footerY,
+      'center'
+    );
+    
+    footerY += 4.5;
+    // Instruction 3 - Negative marking
+    pdf.setFont('Vazirmatn', 'bold');
+    pdf.setTextColor(200, 0, 0);
+    this.drawPersianText(
+      pdf,
+      '• توجه: این آزمون دارای نمره منفی است',
+      pageWidth / 2,
+      footerY,
+      'center'
+    );
+    
+    footerY += 4.5;
+    pdf.setFont('Vazirmatn', 'normal');
+    pdf.setTextColor(50);
+    // Instruction 4
+    this.drawPersianText(
+      pdf,
+      '• از مداد نرم و پاک‌کن مناسب استفاده کنید',
+      pageWidth / 2,
+      footerY,
       'center'
     );
     
