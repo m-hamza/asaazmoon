@@ -10,12 +10,12 @@ export class AnswerSheetLayout {
 
   constructor(config: Partial<AnswerSheetConfig>) {
     this.config = {
-      numQuestions: config.numQuestions || 50,
+      numQuestions: config.numQuestions || 120,
       optionsPerQuestion: config.optionsPerQuestion || 4,
       bubbleRadius: config.bubbleRadius || 15,
-      columnsPerPage: config.columnsPerPage || 2,
+      columnsPerPage: config.columnsPerPage || 4, // 4 columns for 120 questions
       bubbleFillThreshold: config.bubbleFillThreshold || 0.3,
-      options: config.options || ['A', 'B', 'C', 'D'],
+      options: config.options || ['الف', 'ب', 'ج', 'د'], // Persian options
       ...config,
     };
   }
@@ -31,17 +31,17 @@ export class AnswerSheetLayout {
     const questionsPerColumn = Math.ceil(numQuestions / columnsPerPage);
     const columnWidth = imageWidth / columnsPerPage;
     
-    // Margins and spacing
-    const topMargin = imageHeight * 0.15; // Account for header/QR code area
-    const bottomMargin = imageHeight * 0.05;
-    const leftMargin = columnWidth * 0.1;
-    const rightMargin = columnWidth * 0.1;
+    // Margins and spacing - adjusted for 4 column layout with 120 questions
+    const topMargin = imageHeight * 0.18; // Account for header/QR code/student info area
+    const bottomMargin = imageHeight * 0.12; // Account for footer with instructions
+    const leftMargin = columnWidth * 0.12;
+    const rightMargin = columnWidth * 0.08;
     
     const availableHeight = imageHeight - topMargin - bottomMargin;
     const rowHeight = availableHeight / questionsPerColumn;
     
     const bubbleSpacing = (columnWidth - leftMargin - rightMargin) / (optionsPerQuestion + 1);
-    const bubbleSize = Math.min(bubbleSpacing * 0.6, rowHeight * 0.6, 30);
+    const bubbleSize = Math.min(bubbleSpacing * 0.65, rowHeight * 0.65, 32);
     
     const layout: BubbleRegion[][] = [];
     
@@ -75,32 +75,32 @@ export class AnswerSheetLayout {
   }
 
   /**
-   * Get QR code search regions (typically top corners)
+   * Get QR code search regions (adjusted for new layout)
    */
   getQRCodeRegions(imageWidth: number, imageHeight: number): Array<{x: number, y: number, width: number, height: number}> {
-    const qrSize = Math.min(imageWidth, imageHeight) * 0.15;
+    const qrSize = Math.min(imageWidth, imageHeight) * 0.12;
     
     return [
-      // Top-right corner
+      // Left side in student info box
       {
-        x: Math.floor(imageWidth - qrSize - 10),
-        y: 10,
+        x: Math.floor(imageWidth * 0.05),
+        y: Math.floor(imageHeight * 0.12),
         width: Math.floor(qrSize),
         height: Math.floor(qrSize),
       },
-      // Top-left corner
+      // Top-left corner (fallback)
       {
-        x: 10,
-        y: 10,
-        width: Math.floor(qrSize),
-        height: Math.floor(qrSize),
+        x: 15,
+        y: 15,
+        width: Math.floor(qrSize * 0.8),
+        height: Math.floor(qrSize * 0.8),
       },
-      // Center-top area (wider search)
+      // Top-right corner (fallback)
       {
-        x: Math.floor(imageWidth * 0.35),
-        y: 10,
-        width: Math.floor(imageWidth * 0.3),
-        height: Math.floor(qrSize),
+        x: Math.floor(imageWidth - qrSize * 0.8 - 15),
+        y: 15,
+        width: Math.floor(qrSize * 0.8),
+        height: Math.floor(qrSize * 0.8),
       },
     ];
   }
